@@ -37,7 +37,7 @@ local listDone = nil
 local itemWindowID = nil
 blueBorder:SetTextureCell(1)
 dir = mq.TLO.MacroQuest.Path():gsub('\\', '/')
-fileName = '/config/gear.ini'
+fileName = '/lua/Gearly/Character Data/'..mq.TLO.Me.CleanName()..'_'..mq.TLO.EverQuest.Server()..'.ini'
 path = dir..fileName
 imguiFlags = bit32.bor(ImGuiWindowFlags.None)
 tableFlags = bit32.bor(ImGuiTableFlags.Hideable,ImGuiTableFlags.NoBordersInBody,ImGuiTableFlags.SizingFixedSame,ImGuiTableFlags.Resizable,ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.BordersOuter,ImGuiTableFlags.Sortable, ImGuiTableFlags.Reorderable,ImGuiTableFlags.SortMulti)
@@ -46,7 +46,7 @@ numColumns = #columns
 invT = {}
 arg = {...}
 
---To just write to the ini file
+--To just write to the ini file if started with /lua run gear once
 if #arg > 0 then
     if arg[1] == "once" then justWrite = true end
 end
@@ -70,7 +70,9 @@ local save_settings = function(set)
 end
 --Read the entire ini file to invT
 local loadini = function()
+    Write.Debug(string.format("Opening path %s",path))
     if io.open(path) then invT = LIP.load(path) end 
+    if io.open(dir..'/lua/Gearly/Character Data/Mrmezzy_'..mq.TLO.EverQuest.Server()..'.ini') then invT = LIP.load(dir..'/lua/Gearly/Character Data/Mrmezzy_'..mq.TLO.EverQuest.Server()..'.ini') end
 end
 
 --Create what we're displaying in the table
@@ -123,7 +125,7 @@ end
 
 --Fill table with my gear stats and write to ini if called for
 local Setup = function(doWrite)
-    myName = mq.TLO.Me.CleanName().."_"..mq.TLO.EverQuest.Server() -- To support same name on different servers
+    myName = mq.TLO.Me.CleanName()
     loadini()
     invT[myName] = {} --Blanks our current nested table. Means you can't hand edit the ini. No reason to. 
     for i=0,22,1 do
