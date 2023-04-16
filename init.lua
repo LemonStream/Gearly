@@ -1,17 +1,12 @@
 --[[Companion to gear.mac v0.2
 UI that shows your own stats and those connected to DNet
 Only query upon request. Don't monitor/observe
-Tab per char? Meh
-Table view that's sortable?
 Click on a slot to show the item for all connected chars (all db chars?)
-Right click a name in the list to filter to just that name (need to fix)
 Add in all stat fields since you can right click the headers and choose what to display
 
 Click on a slot to put that slot only into a table data and display it on the right
 Click a button to show all items in file in a table (no trees)
-Display total inventory slots left open (both category)
 
-Only saves to ini file using /gear refresh or /gear refreshall or if there is no ini file
 /gear show, /gear hide
 /lua run gear once --This will just write to the ini and stop the script
 ToDo:
@@ -42,15 +37,11 @@ local itemWindowID = nil
 local myName = mq.TLO.Me.CleanName.Lower()
 local doRefresh = false
 blueBorder:SetTextureCell(1)
---mq.luaDir
---2nd, create an init.lua file in your tcn folder, and you can launch your script with /lua run tcn
---then you can require from it require('tcg_libraries') etc and it will search that folder
 dir = mq.TLO.MacroQuest.Path():gsub('\\', '/')
 fileName = '/lua/Gearly/Character Data/'..myName..'_'..mq.TLO.EverQuest.Server()..'.ini'
 path = dir..fileName
-testPath = mq.TLO.MacroQuest.Path():gsub('\\', '/')..'/lua/Gearly/Character Data/'..myName..'_2'..mq.TLO.EverQuest.Server()..'.ini'
 imguiFlags = bit32.bor(ImGuiWindowFlags.None)
-tableFlags = bit32.bor(ImGuiTableFlags.Hideable,ImGuiTableFlags.NoBordersInBody,ImGuiTableFlags.SizingFixedSame,ImGuiTableFlags.Resizable,ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.BordersOuter,ImGuiTableFlags.Sortable, ImGuiTableFlags.Reorderable,ImGuiTableFlags.SortMulti)
+tableFlags = bit32.bor(ImGuiTableFlags.ScrollX,ImGuiTableFlags.Hideable,ImGuiTableFlags.NoBordersInBody,ImGuiTableFlags.SizingFixedSame,ImGuiTableFlags.Resizable,ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.BordersOuter,ImGuiTableFlags.Sortable, ImGuiTableFlags.Reorderable,ImGuiTableFlags.SortMulti)
 settingsTableFlags = bit32.bor(ImGuiTableFlags.SizingFixedFit,ImGuiTableFlags.NoHostExtendX,ImGuiTableFlags.NoBordersInBody,ImGuiTableFlags.RowBg, ImGuiTableFlags.Sortable) --remove ImGuiTableFlags.Resizable to see if it fixes CTD
 invT = {} --My character inventory used to make the ini
 allInventories = {} --Full connected client ini data. This isn't manipulated and is only reloaded. Don't want to have to read from the files repeatedly. 
@@ -92,7 +83,6 @@ local function checkIniSettings()
     if not io.open(tempPath) then --Doesnt exist. Default settings based on geatData.lua
         Write.Info("Please wait while we create your settings files")
         for k,v in pairs(gearData.itemTypesToDisplay) do
-            --printf("k is %s v is %s",k,v)
             table.insert(itemTypesTable,k)
             iniDisplaySettings["Display Settings"][k] = v
         end
@@ -103,7 +93,6 @@ local function checkIniSettings()
         statsToDisplay = iniDisplaySettings["Column Order"]
     else --Load ini if it exists already (with a blank check)
         for k in pairs(gearData.itemTypesToDisplay) do
-            --printf("k is %s v is %s",k,v)
             table.insert(itemTypesTable,k)
         end
         iniDisplaySettings = LIP.load(tempPath)
@@ -116,7 +105,7 @@ local function checkIniSettings()
                 iniDisplaySettings["Column Order"][k] = v
             end
         end
-         statsToDisplay = iniDisplaySettings["Column Order"]--Load the columns to display from the ini. Going to need to save the ini in the column display order we want or store separate order data
+         statsToDisplay = iniDisplaySettings["Column Order"]--Load the columns to display from the ini
     end
 end
 
@@ -133,7 +122,6 @@ local function loadAllCharactersTable(loadSettings)
         if io.open(tempPath) then
             allInventories[currentClient] = LIP.load(tempPath)
         else --If characters connected to dannet don't have their own ini yet
-            Write.Debug(string.format("No char %s",currentClient))
             Write.Error(string.format("No toon info for %s. Run /lua run gearly once on all characters or click the Refresh All button",currentClient))
             allInventories[currentClient]["other"] = {}
         end
@@ -143,33 +131,24 @@ end
 
 --Create what we're displaying in the table
 local function DtotheA(wipe)
-    --Write.Debug("Entering DtotheA")
     if not displayTable or wipe then displayTable = {} end
-    if sort_specs then sort_specs.SpecsDirty = true end --To resort it after we update what we're sorting= true --To resort it after we update what we're sorting
+    if sort_specs then sort_specs.SpecsDirty = true end --To resort it after we update what we're sorting
     for toon, slotTable in pairs(allInventories) do --Toon table that has all the slots in another table 
-        local toonClass = allInventories[toon]["other"]["class"] --Write.Debug(toonClass)
-        local toonName = allInventories[toon]["other"]["Character"] --Write.Debug(toonName)
-        --Write.Debug(string.format("Entering toon %s in slot %s",toon,slotTable))
+        local toonClass = allInventories[toon]["other"]["class"]
+        local toonName = allInventories[toon]["other"]["Character"]
         for slot, valuesTable in pairs(allInventories[toon]) do --For each slot in the slot table which has a values table
-            --Write.Debug(string.format("Entering slot %s with toon %s",slot,toon))
             if slot ~= "other" then
                 local dataToInsert = {}
                 if currentFilters then
                     matchClass = string.match(currentFilters,toonClass) --used in AutoFilter
                     matchSlot = string.match(currentFilters,slot)
-                    --Write.Debug(string.format("matchclass is %s with currentFitlers %s on class %s slot %s",matchClass,currentFilters,toonClass,matchSlot))
                     for statType, value in pairs(allInventories[toon][slot]) do
-                        --Write.Debug(string.format("Entering statType %s with value %s %s",statType,value,#allInventories[toon][slot]))
-                        --Write.Debug(string.format("currentFilters is %s",currentFilters))
-                        --if statType == "Class" then break end
-                        --Write.Debug(string.format("class %s slot %s list %s",matchClass,matchSlot,listDone))
-                        --if not listDone and not matchClass and matchSlot then dataToInsert[statType] = value end --If it finds a match in currentFilters with the first entry (which is slot name) then add it to end of val list.
                         if matchSlot and not isAuto then
                             if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
                             dataToInsert["Character"] = toonName --character name to display in the table
                             dataToInsert["ItemSlot"] = slot --Item slot name
                             dataToInsert["Class"] = toonClass --Item slot name
-                        elseif matchSlot and matchClass then --matches | array to our 11th entry in value (class shortname) for AutoFilter. string.match(texttosearch,match,index)
+                        elseif matchSlot and matchClass then --matches | array to our 11th entry in value (class shortname) for AutoFilter
                             if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
                             dataToInsert["Character"] = toonName --character name to display in the table
                             dataToInsert["ItemSlot"] = slot --Item slot name
@@ -180,12 +159,7 @@ local function DtotheA(wipe)
                     if matchSlot and matchClass then table.insert(displayTable,dataToInsert) end
                 else
                     for statType, value in pairs(allInventories[toon][slot]) do --For each stat and value in the current slot for the current toon
-                        --Write.Debug(string.format("Entering statType %s with value %s %s",statType,value,#allInventories[toon][slot]))
-                        --Write.Debug(string.format("Entering statType %s with value %s",statType,value))
-                        --if statType == "Class" then break end
                         if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
-                        --Write.Debug(string.format("value is %s into %s",value,statType))
-                        --Write.Debug(dataToInsert[statType])
                     end
                     dataToInsert["Character"] = toonName --character name to display in the table
                     dataToInsert["ItemSlot"] = slot --Item slot name
@@ -195,7 +169,6 @@ local function DtotheA(wipe)
             end
         end
     end
-    --LIP.save(testPath, displayTable)
 end
 
 --Fill table with my gear stats and write to ini if called for
@@ -203,27 +176,23 @@ local function createInventoryData(doWrite,reloadIni)
     for i=0,22,1 do --Writes my gear stats to the invT[myName] table.
         Inv = mq.TLO.Me.Inventory(i)
         local slotName = mq.TLO.Me.Inventory(i).InvSlot.Name()
-        --Write.Debug(string.format("For slot #%s, %s in %s",i,Inv(),slotName))
         if Inv() then --If I have an item in the slot
             invT[slotName] = {}
             for j=1,#statsToDisplay do --For each stat we want to save and display
-                --Write.Debug(string.format("slotName is %s #stats is %s statsToDisplayJ is %s stat is %s",slotName, #statsToDisplay, statsToDisplay[j],Inv[statsToDisplay[j]]))
                 invT[slotName][statsToDisplay[j]] = Inv[statsToDisplay[j]] --Put the stat and its value into the table
             end
         else
-            --Write.Debug("UH OH! No item!")
             slotName = gearData.slots[i] --Have to define slotName since it's empty and comes in as nil
             invT[slotName] = {}
             for j=1,#statsToDisplay do --For each stat we want to save and display
-                --Write.Debug(string.format("slotName is %s #stats is %s statsToDisplayJ is %s",slotName, #statsToDisplay, statsToDisplay[j]))
-                if Inv[statsToDisplay[j]] then invT[slotName][statsToDisplay[j]] = " " end--Put the stat and its value into the table if it's a real item stat. Character and class won't write to the ini in the per slot sections this way
+                if Inv[statsToDisplay[j]] then invT[slotName][statsToDisplay[j]] = " " end--Put the stat and its value into the table if it's a real item stat.
             end
         end
         if i == 22 then invT.other = {class = mq.TLO.Me.Class(), Character = mq.TLO.Me.CleanName.Lower()} end
     end
     if doWrite then --if updating the character ini, write each slot to the ini for the character running the script
         save_settings(invT)
-        Write.Info("\agGearly updated")
+        Write.Info("\agMy Gearly Data Updated")
     end
     if reloadIni then loadAllCharactersTable(reloadIni) end
 end
@@ -232,30 +201,31 @@ end
 local function loadSettings()
     local s = io.open(path)
     Write.Info("Welcome to Gearly by Lemons")
-    --printf(s)
     if s and not justWrite then --Character data file exists
-        print("ini exists")
+        Write.Info("Ini already exists")
         checkIniSettings()
         createInventoryData(false,true) --Update the character ini file with inventory data, load 
     else
-        print("Writing new data to gear.ini")
+        Write.Info("Writing new data to gear.ini")
         checkIniSettings()
         createInventoryData(true,true)
     end
 end
 
---Write all connected toons to the gear.ini file one at a time to avoid the hulk
+--Write all connected toons to the gear.ini file one at a time to avoid The Thing
 --Don't need this anymore since it's all individual files.
 local function refreshAll()
+    Write.Info("\agRefreshing all connected character's gear data")
     local pn = mq.TLO.DanNet.Peers(1)
     mq.cmdf("/dgex /lua run gearly once")
     createInventoryData(true,false)
     if mq.TLO.DanNet.PeerCount() > 1 then
-        mq.delay(1000, function () return mq.TLO.DanNet(pn).O('"Lua.Script[gearly].Status"')() == "running" end ) 
-        mq.delay(1000, function () return mq.TLO.DanNet(pn).O('"Lua.Script[gearly].Status"')() == "exited"end )
+        mq.delay(500, function () return mq.TLO.DanNet(pn).O('"Lua.Script[gearly].Status"')() == "running" end ) 
+        mq.delay(500, function () return mq.TLO.DanNet(pn).O('"Lua.Script[gearly].Status"')() == "exited"end )
         dannet.unobserve(pn,"Lua.Script[gearly].Status",1000)
     end
     loadAllCharactersTable(false) --Load character data from ini files but don't reload gearly ini settings
+    Write.Info("\arDone refreshing gear data")
 end
 
 --GUI:Does clicky things. nm is name of the item that's passed in. Filters based on currentFilters
@@ -299,14 +269,13 @@ local function Click(nm)
     end
 end
 
---GUI:Does clicky things on the table. nm is name of the char that's passed in. Filters based on currentFilters
+--GUI:Does clicky things on the table. nm is name of the char that's passed in. Filters based on currentFilters. Not used. You have to scroll to click anyways. No point
 local function ClickTable(nm)
     Write.Debug("1Clicked table on "..nm)
     clickedR = ImGui.IsMouseClicked(ImGuiMouseButton.Right)
     if ImGui.IsItemHovered() and clickedR and nm then
         Write.Debug("2Clicked table on "..nm)
-        if currentFilters == nm then currentFilters = nil else currentFilters = nm Write.Info(currentFilters) end --Currently crashes due to nil at 345. currentFitlers probably only can deal with slot name instead of any data
-        displayTable = nil
+        if currentFilters == nm then currentFilters = nil else currentFilters = nm Write.Info(currentFilters) end
         DtotheA()
         return
     end
@@ -317,18 +286,11 @@ local function CompareWithSortSpecs(a, b)
     for n = 1, current_sort_specs.SpecsCount, 1 do --for each header we're filtering by since we can filter by multiple at one time
         local sort_spec = current_sort_specs:Specs(n)
         local columnName = statsToDisplay[sort_spec.ColumnUserID]
-        --Write.Debug(string.format('  Spec=%d ColumnUserID=%d ColumnIndex=%d SortOrder=%d SortDirection=%d colName=%s',n, sort_spec.ColumnUserID, sort_spec.ColumnIndex, sort_spec.SortOrder, sort_spec.SortDirection,columnName))
         local delta = 0
-        --Check if a is a number or not and then apply the sort. Also replace  "a.HP" with "a[n]"? Not sure if that will work or not. 
-       -- printTable(a)
-       -- printTable(b)
-       -- printTablei(sort_spec)
-        --print(tostring(a)) --This is a table (duh)
-       -- print(tostring(b))
+        --Check if a is a number or not and then apply the sort. 
         local valueA = a[columnName]
         local valueB = b[columnName]
         if not valueA or not valueB then return false end
-        --Write.Debug(string.format("Name is %s and aID is %s bID is %s type is %s",sort_spec.ColumnUserID,valueA,valueB,type(valueA)))
         if valueA == " "  and valueB == " " then return false end --If both blank entries, then return false (delta 0)
         if valueA == " "  and type(valueB) == "number" then --B isn't blank and is a num, set blank A to -1
             valueA = -1
@@ -339,9 +301,7 @@ local function CompareWithSortSpecs(a, b)
         if valueB == " " then tonumber(valueB) end
         if valueA == nil then valueA = -1 end
         if valueB == nil then valueB = -1 end
-        --Write.Debug(string.format("a is %s type %s b is %s type %s",valueA,type(valueA),valueB,type(valueB)))
         if type(valueA) == "string" then --name
-            --Write.Debug(string.format("It's a string %s",(valueA < valueB)))
             if valueA < valueB then
                 delta = -1
             elseif valueB < valueA then
@@ -350,10 +310,8 @@ local function CompareWithSortSpecs(a, b)
                 delta = 0
             end
         elseif type(valueA) == "number" then
-            --Write.Debug("It's a number")
             delta = valueA - valueB
         end
-        --Write.Debug(string.format("Delta is %s on %s",delta,sort_spec.type))
         if delta ~= 0 then
             if sort_spec.SortDirection == ImGuiSortDirection.Ascending then
                 return delta < 0
@@ -361,7 +319,7 @@ local function CompareWithSortSpecs(a, b)
             return delta > 0
         end
     end
-    return false --Crashing here because I'm not returning earlier. If I get to here, it needs to be specific data, not tables or I need to return data from each of the tables
+    return false
 end
 
 --GUI:Draw the item icons in the GUI. Slot #, name of item, dummy line for spacing, butt(unused)
@@ -435,14 +393,13 @@ local function drawTable()
                 for row_n = clipper.DisplayStart, clipper.DisplayEnd - 1, 1 do --for each row that is currently shown
                     local item = displayTable[row_n +1] --table item to display. Not sure why +1. 0 vs 1 index?
                     ImGui.PushID(item) --Not sure. Initialize it to access it?
-                    if ImGui.IsItemClicked(ImGuiMouseButton.Right) then assert(ClickTable(item.Character),"You need to check Character in the settings to use this function") end --handles right clicking the name on the table.
                     for i=1,#statsToDisplay do --For each stat they want to see, display it on the table
-                        if item[statsToDisplay[i]] == "Character" then else --Does this bank on character being in the first slot? With a dynamic statsToDisplay table that might be a problem
+                        if item[statsToDisplay[i]] == "Character" then else
                             ImGui.TableNextColumn()
                             ImGui.Text(string.format('%s', item[statsToDisplay[i]]))
                         end
                     end
-                    ImGui.PopID() --Loaded the data now let show it? Not sure
+                    ImGui.PopID()
                 end
             end
         ImGui.EndTable()
@@ -452,7 +409,6 @@ end
 --Handle auto filter based on data in item window
 local function autoFilter()
     local isOpen = mq.TLO.Window("ItemDisplayWindow").Open()
-    --printf("in autofilter %s %s",isOpen,currentFilters)
     if isOpen then
         local itemWindow = mq.TLO.Window("ItemDisplayWindow").Text() --Name of the item in the item window
         if itemWindow:match("(Augmented)") then itemWindow = itemWindow:sub(1,-13) end
@@ -478,7 +434,6 @@ local function autoFilter()
             print("currentFilters is ",currentFilters)
             sort_specs.SpecsDirty = true
             if not slots then return end
-            --Primary vs mainhand etc. 
             if string.match(slots,"wrist") then
                 currentFilters = currentFilters.."|".."leftwristrightwrist"
                 slots = slots:gsub("wrist","") --remove wrist from slots
@@ -580,7 +535,6 @@ local function settingsPopout()
         ImGui.SetCursorPos(210, 25)
         if ImGui.Button("Save and close") then --Do all the updating if they hit save
             Write.Info("Settings Saved. Forcing all clients to update character data")
-            printTable(columnToRemove)
             for k,v in ipairs(columnToRemove) do
                 for i=1, #statsToDisplay do
                     local tempStat = statsToDisplay[i]
@@ -597,10 +551,7 @@ local function settingsPopout()
             doRefresh = true
             DtotheA(true)
             openSettings = not openSettings
-            --Need to save the settings to the ini file here. Don't want to yet cause I want to test with default settings
         end
-        
-        --statsToDisplay = tempStatsToDisplay --This is causing a silent CTD
     end
     ImGui.End()
 end
@@ -636,20 +587,14 @@ local function Gear()
         end
 
         ImGui.SetCursorPos(70, 125) --Create refresh/update gear button 
-        if ImGui.Button("R",23,23) then
+        if ImGui.Button("Update my gear",0,0) then
             if ImGui.IsMouseReleased(ImGuiMouseButton.Left) then Click("refresh") end
         end
-        ImGui.SetCursorPos(96, 128)
-        ImGui.Text("Update gear")
 
         ImGui.SetCursorPos(70, 160) --Create refresh all/update all gear button 
-        if ImGui.Button("RA",23,23) then
+        if ImGui.Button("Update all gear",0,0) then
             if ImGui.IsMouseReleased(ImGuiMouseButton.Left) then Click("refreshall") end
         end
-        ImGui.SetCursorPos(103, 153)
-        ImGui.Text("Update")
-        ImGui.SetCursorPos(101, 168)
-        ImGui.Text("all toons")
 
         optionsBoxes()
         settingsPopout()
@@ -674,12 +619,10 @@ local function gearCommand(args)
     if argl == "refresh" then
         Write.Debug("Calling refresh command")
         createInventoryData(true)
-        --save_settings(invT)
     end
     if argl == "refreshall" then
         if connected(myName) then
             refreshAll()
-            --save_settings(invT)
             DtotheA(true)
             Write.Debug("Done writing all clients to gear.ini")
         else
@@ -687,7 +630,6 @@ local function gearCommand(args)
         end
     end
     if argl == "printtable" then
-        --loadini()
         printTable(displayTable)
     end
 end
@@ -696,7 +638,6 @@ end
 mq.bind('/gear', gearCommand)
 
 --Main
---checkIniSettings() --So we have an integer table to sort in the settings window created from the user settings table of what stats to display
 if not justWrite then FillTable() end
 loadSettings()
 if justWrite then Write.Info("Finished updating gear.ini in "..path) mq.exit() end
@@ -704,19 +645,16 @@ if justWrite then Write.Info("Finished updating gear.ini in "..path) mq.exit() e
 --initialize the GUI
 mq.imgui.init('thing', Gear)
 
---if not allInventories[myName]["other"] then printf("empty file") justWrite = true loadSettings() end
-
 DtotheA(true) --initial loading of the data to display
 
 while loop do
     if doRefresh then
-        if mq.TLO.DanNet.PeerCount() > 1 then dannet.observe(pn,"Lua.Script[gearly].Status",3000) end
         refreshAll()
         DtotheA(true)
         Write.Debug("Done writing all clients to gear.ini")
         doRefresh = false
         sort_specs.SpecsDirty = true
     end
-    --if not next(displayTable) then DtotheA() end --displays a table at load up or if we wipe the data
+
     mq.delay(100)
 end
