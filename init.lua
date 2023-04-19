@@ -11,6 +11,9 @@ Click a button to show all items in file in a table (no trees)
 /lua run gear once --This will just write to the ini and stop the script
 ToDo:
 Convert all to sql databases instead of inis
+
+Update Notes:
+
 ]]
 
 local mq = require('mq')
@@ -37,8 +40,8 @@ local itemWindowID = nil
 local myName = mq.TLO.Me.CleanName.Lower()
 local doRefresh = false
 blueBorder:SetTextureCell(1)
-dir = mq.TLO.MacroQuest.Path():gsub('\\', '/')
-fileName = '/lua/Gearly/Character Data/'..myName..'_'..mq.TLO.EverQuest.Server()..'.ini'
+dir = mq.luaDir
+fileName = '/Gearly/Character Data/'..myName..'_'..mq.TLO.EverQuest.Server()..'.ini'
 path = dir..fileName
 imguiFlags = bit32.bor(ImGuiWindowFlags.None)
 tableFlags = bit32.bor(ImGuiTableFlags.ScrollX,ImGuiTableFlags.Hideable,ImGuiTableFlags.NoBordersInBody,ImGuiTableFlags.SizingFixedSame,ImGuiTableFlags.Resizable,ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.BordersOuter,ImGuiTableFlags.Sortable, ImGuiTableFlags.Reorderable,ImGuiTableFlags.SortMulti)
@@ -78,7 +81,7 @@ local function checkIniSettings()
     iniDisplaySettings = {}
     iniDisplaySettings["Display Settings"] = {}
     iniDisplaySettings["Column Order"] = {}
-    local tempFileName = '/lua/Gearly/Gearly Settings.ini'
+    local tempFileName = '/Gearly/Gearly Settings.ini'
     local tempPath = dir..tempFileName
     if not io.open(tempPath) then --Doesnt exist. Default settings based on geatData.lua
         Write.Info("Please wait while we create your settings files")
@@ -113,16 +116,16 @@ end
 local function loadAllCharactersTable(loadSettings)
     local numConnectedClients = mq.TLO.DanNet.PeerCount()
     local allClients = mq.TLO.DanNet.Peers()
-    --Write.Debug(numConnectedClients)
+    allInventories = {}
     for i=1, numConnectedClients do --Iterate through 1-#of connected toons
         if not mq.TLO.DanNet.Peers(i)() then currentClient = getArg(allClients,i,"|")  else currentClient = mq.TLO.DanNet.Peers(i)() end
-        allInventories[currentClient] = {}
-        local tempFileName = '/lua/Gearly/Character Data/'..currentClient..'_'..mq.TLO.EverQuest.Server()..'.ini'
+        --allInventories[currentClient] = {}
+        local tempFileName = '/Gearly/Character Data/'..currentClient..'_'..mq.TLO.EverQuest.Server()..'.ini'
         local tempPath = dir..tempFileName
         if io.open(tempPath) then
             allInventories[currentClient] = LIP.load(tempPath)
         else --If characters connected to dannet don't have their own ini yet
-            Write.Error(string.format("No toon info for %s. Run /lua run gearly once on all characters or click the Refresh All button",currentClient))
+            Write.Error(string.format("No toon info for %s. Run /lua run gearly once on all characters or click the Update All Gear button",currentClient))
             allInventories[currentClient]["other"] = {}
         end
     end
@@ -361,8 +364,7 @@ end
 local function nameColumns()
     for i=1,#statsToDisplay,1 do --columns table will be populated when we set the settings so this shouldn't need to change
         local colName = statsToDisplay[i]
-        ImGui.TableSetupColumn(colName,0,-1.0,i) --bit32 to make unique numerical for sorting purposes
-        --printf("name %s bit %s",colName,string.hash(colName))
+        ImGui.TableSetupColumn(colName,0,-1.0,i)
     end
 end
 
@@ -430,8 +432,6 @@ local function autoFilter()
                     slots = slots.." "..sltc
                 end
             end
-            print("Slots is ",slots)
-            print("currentFilters is ",currentFilters)
             sort_specs.SpecsDirty = true
             if not slots then return end
             if string.match(slots,"wrist") then
@@ -547,7 +547,7 @@ local function settingsPopout()
                 end
             end
             iniDisplaySettings["Column Order"] = statsToDisplay
-            LIP.save(dir..'/lua/Gearly/Gearly Settings.ini', iniDisplaySettings)
+            LIP.save(dir..'/Gearly/Gearly Settings.ini', iniDisplaySettings)
             doRefresh = true
             DtotheA(true)
             openSettings = not openSettings
