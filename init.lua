@@ -607,8 +607,8 @@ local function Gear()
                 drawInventory(i,displaySlotTable[i]["n"],displaySlotTable[i]["d"])
             end
 
-        ImGui.SetCursorPos(x+7, 344) --Location of the clear button. It's offset on a different character. Not sure why. Need to investigate
-        if ImGui.Button("Clear",52,50) then
+        ImGui.SetCursorPos(x+7, 352) --Location of the clear button. It's offset on a different character. Not sure why. Need to investigate
+        if ImGui.Button("Clear",50,48) then
             if ImGui.IsMouseReleased(ImGuiMouseButton.Left) then Click("clear") end
         end
 
