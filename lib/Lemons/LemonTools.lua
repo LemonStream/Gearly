@@ -1,7 +1,6 @@
 --Commons tools I use 
 --v0.1
-local mq = require('mq')
-local Write = require('lib/Write')
+--local mq = require('mq')
 
 
 slotArray = {
@@ -27,9 +26,27 @@ slotArray = {
     [19] = "feet",
     [20] = "waist",
     [21] = "powersource",
-    [22] = "ammo" 
-}      
+    [22] = "ammo"
+}
 
+goodTargets = {
+    "NPC",
+    "PET",
+
+}
+
+function inCombat()
+    return mq.TLO.Me.CombatState() == "COMBAT"
+end
+
+function WithinRange(id)
+    return mq.TLO.Spawn(id).Distance() <= CAMP_RADIUS
+end
+--Is the spawn ID an attackable thing. Add to goodTargets to expand
+function goodTarget(id)
+    local spawn = mq.TLO.Spawn(id)
+    return tableHasValue(goodTargets,spawn.Type())
+end
 
 --Return spawn name from ID.
 IDtoSpawn = function(id)
@@ -107,8 +124,6 @@ function tableHasValue(tbl, value)
     end
     return false
   end
-  
-
 
 printTable = function(t) --for dictionary/nested
     print("Printing table ", t)
@@ -149,11 +164,18 @@ function printUserData(t)
     print(table.concat(userData, ", "))
 end
 
-countString = function(this)
-    local _, count = string.gsub(argv, "%",this, "")
-    print(count)
-    _ = nil
-    return(count)
+function countString(this, str)
+    local _, count = string.gsub(str, this, "")
+    return count
+end
+
+--Can't get this to work
+function table:isEmpty()
+    print(self)
+    for _, _ in pairs(self) do
+        return false
+    end
+    return true
 end
 
 --Only accepts dictionary? Yes
@@ -163,6 +185,15 @@ function tableLength(T)
     return count
   end
   
+function stringToTable(str,delim)
+    local _, count = string.gsub(str, delim, "")
+    local t ={}
+    for i=1,count do
+        table.insert(t,getArg(str,i,delim))
+    end
+    return t
+end
+
   --For getting the nth argument from string arg as separate by s
 getArg = function(arg,n,s)
     local count = 0
@@ -174,6 +205,17 @@ getArg = function(arg,n,s)
         end
     end
 end
+
+function splitString(inputString, delimiter)
+    local result = {}
+    
+    local pattern = string.format("([^%s]+)", delimiter)
+    for item in string.gmatch(inputString, pattern) do
+      table.insert(result, item)
+    end
+    
+    return result
+  end
 
 printArg = function(arg)
     print(arg)
@@ -191,21 +233,40 @@ Homogenize = function()
     Write.Debug(string.format("MTID is now %s",mq.TLO.Macro.Variable("MyTargetID")))
 end
 
-    function upvalues()
-        local variables = {}
-        local idx = 1
-        local func = debug.getinfo(2, "f").func
-        while true do
-          local ln, lv = debug.getupvalue(func, idx)
-          if ln ~= nil then
-            variables[ln] = lv
-          else
-            break
-          end
-          idx = 1 + idx
+function upvalues()
+    local variables = {}
+    local idx = 1
+    local func = debug.getinfo(2, "f").func
+    while true do
+        local ln, lv = debug.getupvalue(func, idx)
+        if ln ~= nil then
+        variables[ln] = lv
+        else
+        break
         end
-        return variables
-      end
+        idx = 1 + idx
+    end
+return variables
+end
 
+function f(fmt, ...)
+    return string.format(fmt, ...)
+end
 
- 
+--To echo variables within a script since evals don't have access to it
+function lecho(arg)
+    if _G[arg] then print(_G[arg]) else printf("No variable named %s",arg) end return
+end
+mq.bind('/lecho', lecho)
+
+--Change a variable on the fly
+function lvarset(arg1,arg2)
+    if _G[arg1] then _G[arg1] = arg2 else printf("No variable named %s",arg) end return
+end
+mq.bind('/lvarset', lvarset)
+
+--Change write level
+function WriteLevel(arg1)
+    Write.loglevel = arg1
+end
+mq.bind('/writelevel', WriteLevel)

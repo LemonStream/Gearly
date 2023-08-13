@@ -13,18 +13,17 @@ ToDo:
 Convert all to sql databases instead of inis
 
 Update Notes:
-
+Now supports /dnet fullnames on 
 ]]
 
-local mq = require('mq')
---local sql = require('lsqlite3')
+mq = require('mq')
 require('ImGui')
-local Write = require("lib/Write")
-local dannet = require('lib/dannet/helpers')
-local LIP = require('lib/LIP')
-local LT = require('lib/Lemons/LemonTools')
-local gearData = require("gearData")
-local statsToDisplay = {}
+Write = require("lib/Write")
+dannet = require('lib/dannet/helpers')
+LIP = require('lib/LIP')
+LT = require('lib/Lemons/LemonTools')
+gearData = require("gearData")
+statsToDisplay = {}
 Write.loglevel = 'Info'
 
 local animItems = mq.FindTextureAnimation('A_DragItem')
@@ -39,6 +38,9 @@ local listDone = nil
 local itemWindowID = nil
 local myName = mq.TLO.Me.CleanName.Lower()
 local doRefresh = false
+local useGroup = 1
+local useGroupName = "all"
+local beta = false
 blueBorder:SetTextureCell(1)
 dir = mq.luaDir
 fileName = '/Gearly/Character Data/'..myName..'_'..mq.TLO.EverQuest.Server()..'.ini'
@@ -54,7 +56,9 @@ arg = {...}
 
 --To just write to the ini file if started with /lua run gear once
 if #arg > 0 then
-    if arg[1] == "once" then justWrite = true end
+    if arg[1]:lower() == "once" then justWrite = true end
+    if arg[1]:lower() == "debug" then Write.loglevel = 'Debug' end
+    if arg[1]:lower() == "beta" then beta = true end
 end
 
 local itemT = {}
@@ -83,6 +87,7 @@ local function checkIniSettings()
     iniDisplaySettings["Column Order"] = {}
     local tempFileName = '/Gearly/Gearly Settings.ini'
     local tempPath = dir..tempFileName
+    Write.Debug(string.format("path is %s open is %s",tempPath,io.open(tempPath)))
     if not io.open(tempPath) then --Doesnt exist. Default settings based on geatData.lua
         Write.Info("Please wait while we create your settings files")
         for k,v in pairs(gearData.itemTypesToDisplay) do
@@ -114,19 +119,36 @@ end
 
 --Read the entire ini file to allInventories. Changed to individual files and have to iterate over each person connected to dannet
 local function loadAllCharactersTable(loadSettings)
-    local numConnectedClients = mq.TLO.DanNet.PeerCount()
-    local allClients = mq.TLO.DanNet.Peers()
+    local numConnectedClients
+    local allClients
+    if useGroupName == "all" then
+        numConnectedClients = mq.TLO.DanNet.PeerCount()
+        allClients = mq.TLO.DanNet.Peers()
+    else
+        allClients = mq.TLO.DanNet.Peers(useGroupName)()
+        numConnectedClients = mq.TLO.DanNet.PeerCount(useGroupName)()
+    end
+    Write.Debug(string.format("#connected is %s allClients list is %s useGroupName %s",numConnectedClients,allClients, useGroupName))
     allInventories = {}
     for i=1, numConnectedClients do --Iterate through 1-#of connected toons
-        if not mq.TLO.DanNet.Peers(i)() then currentClient = getArg(allClients,i,"|")  else currentClient = mq.TLO.DanNet.Peers(i)() end
+        currentClient = getArg(allClients,i,"|")
+        local _position = string.find(currentClient,"_")
+        Write.Debug(string.format("pos: %s",_position))
+        if _position then
+            currentClient = string.sub(currentClient, _position + 1)
+        end
+        Write.Debug(string.format("current Client: %s",currentClient))
+        if not currentClient then Write.Error(string.format("CRITICAL ERROR. Please unload and reload DanNet (/plugin mq2dannet unload  /plugin mq2dannet)")) mq.exit() end
         --allInventories[currentClient] = {}
         local tempFileName = '/Gearly/Character Data/'..currentClient..'_'..mq.TLO.EverQuest.Server()..'.ini'
         local tempPath = dir..tempFileName
+        Write.Debug(string.format("path is %s open is %s",tempPath,io.open(tempPath)))
+        allInventories[currentClient] ={}
         if io.open(tempPath) then
             allInventories[currentClient] = LIP.load(tempPath)
         else --If characters connected to dannet don't have their own ini yet
             Write.Error(string.format("No toon info for %s. Run /lua run gearly once on all characters or click the Update All Gear button",currentClient))
-            allInventories[currentClient]["other"] = {}
+            allInventories[currentClient] = {}
         end
     end
     if loadSettings then checkIniSettings() end
@@ -137,37 +159,40 @@ local function DtotheA(wipe)
     if not displayTable or wipe then displayTable = {} end
     if sort_specs then sort_specs.SpecsDirty = true end --To resort it after we update what we're sorting
     for toon, slotTable in pairs(allInventories) do --Toon table that has all the slots in another table 
-        local toonClass = allInventories[toon]["other"]["class"]
-        local toonName = allInventories[toon]["other"]["Character"]
-        for slot, valuesTable in pairs(allInventories[toon]) do --For each slot in the slot table which has a values table
-            if slot ~= "other" then
-                local dataToInsert = {}
-                if currentFilters then
-                    matchClass = string.match(currentFilters,toonClass) --used in AutoFilter
-                    matchSlot = string.match(currentFilters,slot)
-                    for statType, value in pairs(allInventories[toon][slot]) do
-                        if matchSlot and not isAuto then
-                            if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
-                            dataToInsert["Character"] = toonName --character name to display in the table
-                            dataToInsert["ItemSlot"] = slot --Item slot name
-                            dataToInsert["Class"] = toonClass --Item slot name
-                        elseif matchSlot and matchClass then --matches | array to our 11th entry in value (class shortname) for AutoFilter
-                            if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
-                            dataToInsert["Character"] = toonName --character name to display in the table
-                            dataToInsert["ItemSlot"] = slot --Item slot name
-                            dataToInsert["Class"] = toonClass --Item slot name
+        Write.Debug(string.format("current toon: %s",toon))
+        if allInventories[toon]["other"] then 
+            local toonClass = allInventories[toon]["other"]["class"]
+            local toonName = allInventories[toon]["other"]["Character"]
+            for slot, valuesTable in pairs(allInventories[toon]) do --For each slot in the slot table which has a values table
+                if slot ~= "other" then
+                    local dataToInsert = {}
+                    if currentFilters then
+                        matchClass = string.match(currentFilters,toonClass) --used in AutoFilter
+                        matchSlot = string.match(currentFilters,slot)
+                        for statType, value in pairs(allInventories[toon][slot]) do
+                            if matchSlot and not isAuto then
+                                if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
+                                dataToInsert["Character"] = toonName --character name to display in the table
+                                dataToInsert["ItemSlot"] = slot --Item slot name
+                                dataToInsert["Class"] = toonClass --Item slot name
+                            elseif matchSlot and matchClass then --matches | array to our 11th entry in value (class shortname) for AutoFilter
+                                if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
+                                dataToInsert["Character"] = toonName --character name to display in the table
+                                dataToInsert["ItemSlot"] = slot --Item slot name
+                                dataToInsert["Class"] = toonClass --Item slot name
+                            end
                         end
+                        if matchSlot and not isAuto then table.insert(displayTable,dataToInsert) end
+                        if matchSlot and matchClass then table.insert(displayTable,dataToInsert) end
+                    else
+                        for statType, value in pairs(allInventories[toon][slot]) do --For each stat and value in the current slot for the current toon
+                            if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
+                        end
+                        dataToInsert["Character"] = toonName --character name to display in the table
+                        dataToInsert["ItemSlot"] = slot --Item slot name
+                        dataToInsert["Class"] = toonClass --Item slot name
+                        table.insert(displayTable,dataToInsert) --Insert into the next available row the data we want to display
                     end
-                    if matchSlot and not isAuto then table.insert(displayTable,dataToInsert) end
-                    if matchSlot and matchClass then table.insert(displayTable,dataToInsert) end
-                else
-                    for statType, value in pairs(allInventories[toon][slot]) do --For each stat and value in the current slot for the current toon
-                        if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
-                    end
-                    dataToInsert["Character"] = toonName --character name to display in the table
-                    dataToInsert["ItemSlot"] = slot --Item slot name
-                    dataToInsert["Class"] = toonClass --Item slot name
-                    table.insert(displayTable,dataToInsert) --Insert into the next available row the data we want to display
                 end
             end
         end
@@ -180,6 +205,7 @@ local function createInventoryData(doWrite,reloadIni)
         Inv = mq.TLO.Me.Inventory(i)
         local slotName = mq.TLO.Me.Inventory(i).InvSlot.Name()
         if Inv() then --If I have an item in the slot
+            Write.Debug(string.format("i%s Inv%s slot%s",i,Inv(),slotName))
             invT[slotName] = {}
             for j=1,#statsToDisplay do --For each stat we want to save and display
                 invT[slotName][statsToDisplay[j]] = Inv[statsToDisplay[j]] --Put the stat and its value into the table
@@ -209,7 +235,7 @@ local function loadSettings()
         checkIniSettings()
         createInventoryData(false,true) --Update the character ini file with inventory data, load 
     else
-        Write.Info("Writing new data to gear.ini")
+        Write.Info("Writing new data to your character file")
         checkIniSettings()
         createInventoryData(true,true)
     end
@@ -269,18 +295,6 @@ local function Click(nm)
         else
             Write.Error("Dannet required. Make sure you have dannet running with other toons connected to the default group")
         end
-    end
-end
-
---GUI:Does clicky things on the table. nm is name of the char that's passed in. Filters based on currentFilters. Not used. You have to scroll to click anyways. No point
-local function ClickTable(nm)
-    Write.Debug("1Clicked table on "..nm)
-    clickedR = ImGui.IsMouseClicked(ImGuiMouseButton.Right)
-    if ImGui.IsItemHovered() and clickedR and nm then
-        Write.Debug("2Clicked table on "..nm)
-        if currentFilters == nm then currentFilters = nil else currentFilters = nm Write.Info(currentFilters) end
-        DtotheA()
-        return
     end
 end
 
@@ -556,6 +570,18 @@ local function settingsPopout()
     ImGui.End()
 end
 
+local function groupSelector()
+    ImGui.SetCursorPos(70, 200)
+    ImGui.SetNextItemWidth(100)
+    local items = stringToTable(mq.TLO.DanNet.Groups(),"|")
+    useGroup, changed = ImGui.Combo("##combo", useGroup, items, #items)
+    if changed then
+        useGroupName = items[useGroup]
+        loadAllCharactersTable(false)
+        DtotheA(true)
+    end
+end
+
 --GUI:Draw radial buttons for toggles
 local function optionsBoxes()
     ImGui.SetCursorPos(70, 90) --Location of the radial button
@@ -598,6 +624,7 @@ local function Gear()
 
         optionsBoxes()
         settingsPopout()
+        groupSelector()
         if isAuto then autoFilter() end
         if pressedAuto and not isAuto then --One time execution when ticking off Auto Filter checkbox
             if listDone then listDone = nil end
@@ -612,6 +639,7 @@ end
 
 --handles the /gear commands
 local function gearCommand(args)
+    if not args then Write.Info("Specify /gear show /gear hide or /gear refresh") return end
     Write.Debug(string.format("%s called in gearCommand",args))
     argl = args:lower()
     if argl == "show" then openGUI = true end
@@ -624,7 +652,7 @@ local function gearCommand(args)
         if connected(myName) then
             refreshAll()
             DtotheA(true)
-            Write.Debug("Done writing all clients to gear.ini")
+            Write.Debug("Done writing all clients")
         else
             Write.Error("Dannet required. Make sure you have dannet running with other toons connected to the default group")
         end
@@ -640,7 +668,7 @@ mq.bind('/gear', gearCommand)
 --Main
 if not justWrite then FillTable() end
 loadSettings()
-if justWrite then Write.Info("Finished updating gear.ini in "..path) mq.exit() end
+if justWrite then Write.Info("Finished updating character data in "..path) mq.exit() end
 
 --initialize the GUI
 mq.imgui.init('thing', Gear)
@@ -651,7 +679,7 @@ while loop do
     if doRefresh then
         refreshAll()
         DtotheA(true)
-        Write.Debug("Done writing all clients to gear.ini")
+        Write.Debug("Done writing all clients")
         doRefresh = false
         sort_specs.SpecsDirty = true
     end
