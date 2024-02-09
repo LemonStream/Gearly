@@ -13,7 +13,10 @@ ToDo:
 Convert all to sql databases instead of inis
 
 Update Notes:
-Now supports /dnet fullnames on 
+1.23
+Fixed string overflow crash if using a lot of observers. 
+Slot mismatching/error fixed
+
 ]]
 
 mq = require('mq')
@@ -53,11 +56,12 @@ allInventories = {} --Full connected client ini data. This isn't manipulated and
 displayTable = {} --Data that's displayed in the window. May be filtered based by slot or autofilter
 columnToRemove = {}
 arg = {...}
+writeToLog = false
 
 --To just write to the ini file if started with /lua run gear once
 if #arg > 0 then
     if arg[1]:lower() == "once" then justWrite = true end
-    if arg[1]:lower() == "debug" then Write.loglevel = 'Debug' end
+    if arg[1]:lower() == "debug" then Write.loglevel = 'Debug' writeToLog = true end
     if arg[1]:lower() == "beta" then beta = true end
 end
 
@@ -88,6 +92,7 @@ local function checkIniSettings()
     local tempFileName = '/Gearly/Gearly Settings.ini'
     local tempPath = dir..tempFileName
     Write.Debug(string.format("path is %s open is %s",tempPath,io.open(tempPath)))
+    if writeToLog then mq.cmdf("/mqlog path is %s open is %s",tempPath,io.open(tempPath)) end
     if not io.open(tempPath) then --Doesnt exist. Default settings based on geatData.lua
         Write.Info("Please wait while we create your settings files")
         for k,v in pairs(gearData.itemTypesToDisplay) do
@@ -117,6 +122,22 @@ local function checkIniSettings()
     end
 end
 
+--Get dannet groups for the dropdown
+local function getComboItems()
+    local groups = {}
+    for group_idx = 1, mq.TLO.DanNet.GroupCount() do
+        local group = mq.TLO.DanNet.Groups(group_idx)()
+        Write.Debug('group %s idx %s _ %s match %s eval %s',group,group_idx,group:find('_'),group:match('%d', -1),(not group:find('_') or (group:find('_') and group:find('zone'))))
+        if writeToLog then mq.cmdf('group %s idx %s _ %s match %s eval %s',group,group_idx,group:find('_'),group:match('%d', -1),(not group:find('_') or (group:find('_') and group:find('zone')))) end
+        if (not group:find('_') or (group:find('_') and (group:find('zone') or group:find('group'))) and #group > 0) then --temp fix for adding blanks. Not sure what result from Groups is resulting in blanks
+            Write.Debug('adding %s',group)
+            if writeToLog then mq.cmdf('adding %s',group) end
+            table.insert(groups, group)
+        end
+    end
+    ComboBoxGroups = groups
+end
+
 --Read the entire ini file to allInventories. Changed to individual files and have to iterate over each person connected to dannet
 local function loadAllCharactersTable(loadSettings)
     local numConnectedClients
@@ -129,20 +150,24 @@ local function loadAllCharactersTable(loadSettings)
         numConnectedClients = mq.TLO.DanNet.PeerCount(useGroupName)()
     end
     Write.Debug(string.format("#connected is %s allClients list is %s useGroupName %s",numConnectedClients,allClients, useGroupName))
+    if writeToLog then mq.cmdf("/mqlog #connected is %s allClients list is %s useGroupName %s",numConnectedClients,allClients, useGroupName) end
     allInventories = {}
     for i=1, numConnectedClients do --Iterate through 1-#of connected toons
         currentClient = getArg(allClients,i,"|")
         local _position = string.find(currentClient,"_")
         Write.Debug(string.format("pos: %s",_position))
+        if writeToLog then mq.cmdf("/mqlog pos: %s",_position) end
         if _position then
             currentClient = string.sub(currentClient, _position + 1)
         end
         Write.Debug(string.format("current Client: %s",currentClient))
+        if writeToLog then mq.cmdf("/mqlog current Client: %s",currentClient) end
         if not currentClient then Write.Error(string.format("CRITICAL ERROR. Please unload and reload DanNet (/plugin mq2dannet unload  /plugin mq2dannet)")) mq.exit() end
         --allInventories[currentClient] = {}
         local tempFileName = '/Gearly/Character Data/'..currentClient..'_'..mq.TLO.EverQuest.Server()..'.ini'
         local tempPath = dir..tempFileName
         Write.Debug(string.format("path is %s open is %s",tempPath,io.open(tempPath)))
+        if writeToLog then mq.cmdf("/mqlog path is %s open is %s",tempPath,io.open(tempPath)) end
         allInventories[currentClient] ={}
         if io.open(tempPath) then
             allInventories[currentClient] = LIP.load(tempPath)
@@ -160,6 +185,7 @@ local function DtotheA(wipe)
     if sort_specs then sort_specs.SpecsDirty = true end --To resort it after we update what we're sorting
     for toon, slotTable in pairs(allInventories) do --Toon table that has all the slots in another table 
         Write.Debug(string.format("current toon: %s",toon))
+        if writeToLog then mq.cmdf("/mqlog current toon: %s",toon) end
         if allInventories[toon]["other"] then 
             local toonClass = allInventories[toon]["other"]["class"]
             local toonName = allInventories[toon]["other"]["Character"]
@@ -203,9 +229,11 @@ end
 local function createInventoryData(doWrite,reloadIni)
     for i=0,22,1 do --Writes my gear stats to the invT[myName] table.
         Inv = mq.TLO.Me.Inventory(i)
-        local slotName = mq.TLO.Me.Inventory(i).InvSlot.Name()
+        --local slotName = mq.TLO.Me.Inventory(i).InvSlot.Name()
+        local slotName = mq.TLO.InvSlot(i).Name()
         if Inv() then --If I have an item in the slot
             Write.Debug(string.format("i%s Inv%s slot%s",i,Inv(),slotName))
+            if writeToLog then mq.cmdf("/mqlog i%s Inv%s slot%s",i,Inv(),slotName) end
             invT[slotName] = {}
             for j=1,#statsToDisplay do --For each stat we want to save and display
                 invT[slotName][statsToDisplay[j]] = Inv[statsToDisplay[j]] --Put the stat and its value into the table
@@ -260,6 +288,8 @@ end
 --GUI:Does clicky things. nm is name of the item that's passed in. Filters based on currentFilters
 local function Click(nm)
     Write.Debug(string.format("Entering Click with %s", nm))
+    if writeToLog then mq.cmdf("/mqlog Entering Click with %s", nm) end
+    getComboItems()
     local clickedL = ImGui.IsMouseClicked(ImGuiMouseButton.Left)
     local clickedR = ImGui.IsMouseClicked(ImGuiMouseButton.Right)
     if ImGui.IsItemHovered() and clickedL and nm then --left click
@@ -426,6 +456,7 @@ end
 local function autoFilter()
     local isOpen = mq.TLO.Window("ItemDisplayWindow").Open()
     if isOpen then
+        getComboItems()
         local itemWindow = mq.TLO.Window("ItemDisplayWindow").Text() --Name of the item in the item window
         if itemWindow:match("(Augmented)") then itemWindow = itemWindow:sub(1,-13) end
         local numClasses = mq.TLO.DisplayItem(itemWindow).Item.Classes()
@@ -474,6 +505,7 @@ local function autoFilter()
             end
             if slots then currentFilters = currentFilters.."|"..slots end
             Write.Debug("Filter to class "..currentFilters.." for item "..itemWindow)
+            if writeToLog then mq.cmdf("/mqlog Filter to class "..currentFilters.." for item "..itemWindow) end
             displayTable = nil
             DtotheA()
         end
@@ -573,10 +605,9 @@ end
 local function groupSelector()
     ImGui.SetCursorPos(70, 200)
     ImGui.SetNextItemWidth(100)
-    local items = stringToTable(mq.TLO.DanNet.Groups(),"|")
-    useGroup, changed = ImGui.Combo("##combo", useGroup, items, #items)
+    useGroup, changed = ImGui.Combo("##combo", useGroup, ComboBoxGroups, tableLength(ComboBoxGroups))
     if changed then
-        useGroupName = items[useGroup]
+        useGroupName = ComboBoxGroups[useGroup]
         loadAllCharactersTable(false)
         DtotheA(true)
     end
@@ -641,11 +672,13 @@ end
 local function gearCommand(args)
     if not args then Write.Info("Specify /gear show /gear hide or /gear refresh") return end
     Write.Debug(string.format("%s called in gearCommand",args))
+    if writeToLog then mq.cmdf("/mqlog %s called in gearCommand",args) end
     argl = args:lower()
     if argl == "show" then openGUI = true end
     if argl == "hide" then openGUI = false end
     if argl == "refresh" then
         Write.Debug("Calling refresh command")
+        if writeToLog then mq.cmdf("/mqlog Calling refresh command") end
         createInventoryData(true)
     end
     if argl == "refreshall" then
@@ -653,8 +686,10 @@ local function gearCommand(args)
             refreshAll()
             DtotheA(true)
             Write.Debug("Done writing all clients")
+            if writeToLog then mq.cmdf("/mqlog Done writing all clients") end
         else
             Write.Error("Dannet required. Make sure you have dannet running with other toons connected to the default group")
+            if writeToLog then mq.cmdf("/mqlog Dannet required. Make sure you have dannet running with other toons connected to the default group") end
         end
     end
     if argl == "printtable" then
@@ -666,6 +701,7 @@ end
 mq.bind('/gear', gearCommand)
 
 --Main
+getComboItems()
 if not justWrite then FillTable() end
 loadSettings()
 if justWrite then Write.Info("Finished updating character data in "..path) mq.exit() end
@@ -677,9 +713,11 @@ DtotheA(true) --initial loading of the data to display
 
 while loop do
     if doRefresh then
+        getComboItems()
         refreshAll()
         DtotheA(true)
         Write.Debug("Done writing all clients")
+        if writeToLog then mq.cmdf("/mqlog Done writing all clients") end
         doRefresh = false
         sort_specs.SpecsDirty = true
     end
