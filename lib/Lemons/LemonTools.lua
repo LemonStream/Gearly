@@ -29,10 +29,9 @@ slotArray = {
     [22] = "ammo"
 }
 
-goodTargets = {
-    "NPC",
-    "PET",
-
+goodTargetTypesTable = {
+    ["NPC"] = true,
+    ["PET"] = true,
 }
 
 function inCombat()
@@ -45,7 +44,8 @@ end
 --Is the spawn ID an attackable thing. Add to goodTargets to expand
 function goodTarget(id)
     local spawn = mq.TLO.Spawn(id)
-    return tableHasValue(goodTargets,spawn.Type())
+    Write.Trace('goodtarget id %s type %s table %s ignore %s final %s',id,spawn.Type(),goodTargetTypesTable[spawn.Type()],myconfig.Ignore[spawn.CleanName()],(goodTargetTypesTable[spawn.Type()] or false) and (not myconfig.Ignore[spawn.CleanName()]))
+    return (goodTargetTypesTable[spawn.Type()] or false) and (not myconfig.Ignore[spawn.CleanName()]) --The or actually does return either or instead of evaluating to true/false
 end
 
 --Return spawn name from ID.
@@ -110,7 +110,7 @@ end
 
 function tobool(str)
     local bool = false
-    if str == "true" then
+    if str:lower() == "true" then
         bool = true
     end
     return bool
@@ -126,17 +126,19 @@ function tableHasValue(tbl, value)
   end
 
 printTable = function(t) --for dictionary/nested
-    print("Printing table ", t)
-    if type(t) == "table" then
-        for index, data in pairs(t) do
-            printf("index is %s and data is %s",index,data)
-            if type(data) == "table" then 
-                for key, value in pairs(data) do
-                    print('\t', key, value)
+    if tableLength(t) then 
+        print("printTable: Printing ", t)
+        if type(t) == "table" then
+            for index, data in pairs(t) do
+                printf("index is %s and data is %s",index,data)
+                if type(data) == "table" then 
+                    for key, value in pairs(data) do
+                        print('\t', key, value)
+                    end
                 end
             end
-        end
-    else print(t) end
+        else print(t) end
+    else print('printTable: Table is empty') end
 end
 
 printTablei = function(t) --for arrays
@@ -180,10 +182,12 @@ end
 
 --Only accepts dictionary? Yes
 function tableLength(T)
-    local count = 0
+   if not T then print('tableLength: No table provided') else
+     local count = 0
     for _ in pairs(T) do count = count + 1 end
     return count
   end
+end
   
 function stringToTable(str,delim)
     local _, count = string.gsub(str, delim, "")
@@ -216,6 +220,15 @@ function splitString(inputString, delimiter)
     
     return result
   end
+function split(input,delimiter)
+    local values = {}
+    for value in input:gmatch("([^"..delimiter.."]+)") do
+        table.insert(values, value)
+        --print(value)
+    end
+    
+    return values
+end
 
 printArg = function(arg)
     print(arg)
@@ -253,6 +266,51 @@ function f(fmt, ...)
     return string.format(fmt, ...)
 end
 
+function GroupRoles(cmd,name,roleNum)
+    if mq.TLO.Me.AmIGroupLeader() then mq.cmdf('/grouprole %s %s %s',cmd,name,roleNum) end
+end
+
+--[[Usage
+for key, value in sortTableByKey(tableName,Optional sort logic) do
+    ...
+    ]]
+function sortTableByKey(t,sortLogic)
+    local keys = {}
+    for key in pairs(t) do table.insert(keys, key) end
+    table.sort(keys, sortLogic)
+    local i = 0      -- iterator variable
+    local iter = function ()   -- iterator function
+        i = i + 1
+        if keys[i] == nil then return nil
+        else return keys[i], t[keys[i]]
+        end
+    end
+    return iter
+end
+
+--Return a sorted table
+function getKeysSortedByValue(tbl, sortFunction) --Returns a new index table with only the keys in it an sorted
+    local keys = {}
+    for key in pairs(tbl) do
+        table.insert(keys, key)
+    end
+    --For integers and a sort
+    table.sort(keys, function(a, b)
+        --printf("a b is %s %s %s",a,b,type(a))
+        a=tonumber(a)
+        b=tonumber(b)
+        return sortFunction(a, b)
+    end)
+    return keys
+end
+
+--Moves a value from position starting to position ending within table t
+function tableMove(t,starting,ending)
+    local valueToMove = t[starting]
+    table.remove(t,starting)
+    table.insert(t,ending,valueToMove)
+    return t
+end
 --To echo variables within a script since evals don't have access to it
 function lecho(arg)
     if _G[arg] then print(_G[arg]) else printf("No variable named %s",arg) end return
@@ -268,5 +326,100 @@ mq.bind('/lvarset', lvarset)
 --Change write level
 function WriteLevel(arg1)
     Write.loglevel = arg1
+    Write.Info('Writelevel change to %s',Write.loglevel)
 end
 mq.bind('/writelevel', WriteLevel)
+
+--Write a table to a user designated file name. See how data is being stored or to store settings
+function pickleTable(tbl,name)
+    dir = mq.luaDir
+    fn = string.format("\\%s.lua",name)
+    savePath = dir..fn --Saves to main lua folder
+    mq.pickle(savePath,tbl)
+    Write.Info(string.format('Pickled to file %s',savePath))
+end
+
+function searchNestedTables(t, searchString)
+    if searchString then
+        for k, v in pairs(t) do
+            if type(v) == "table" then
+                local result = searchNestedTables(v, searchString)
+                if result then return result end
+            elseif type(v) == "string" and v:match(searchString) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+--[[Live table inspection tool
+gearly = require('../init')
+local checkboxStates = {}
+local openTableWindows = {}
+local tableToDisplay = gearly.displayedItemStatsTable --Point this at what table you want to inspect. Needs to be defined before running since we can't hook and get a list of all active tables if they're not defined as _G.Table
+
+
+local function ShowTableData(tableName, tableData)
+    -- Open a new tree node to display table data
+    if type(tableName) == 'number' then tableName = tostring(tableName) end --TreeNode can't be an integer
+    ImGui.SetNextItemOpen(true)
+    if ImGui.TreeNode(tableName) then
+        -- Display table data
+        if type(tableData) == "table" then
+            for key, value in pairs(tableData) do
+                -- If the value is a table, recursively display it as a tree node
+                if type(value) == "table" then
+                    ShowTableData(key, value) -- Recursively call the function until no more need for trees, like the earth
+                else
+                    ImGui.Text(string.format("%s: %s", key, tostring(value)))
+                end
+            end
+        else
+            ImGui.Text(tableData)
+        end
+
+        ImGui.TreePop() -- Close tree node
+    end
+end
+
+
+local function ShowTableList()
+    -- Open a window to show the table list
+    ImGui.Begin(tostring(tableToDisplay), true, ImGuiWindowFlags_AlwaysAutoResize)
+
+    -- Iterate over each table in the _G environment (old)
+    for tableName, tableData in pairs(tableToDisplay) do
+        -- Display a checkbox for the current table
+        local isChecked, changed = ImGui.Checkbox(tableName, checkboxStates[tableName] or false)
+        if changed then
+            -- Update the checkbox state
+            checkboxStates[tableName] = isChecked
+            if isChecked then
+                openTableWindows[tableName] = true
+            else
+                openTableWindows[tableName] = nil
+            end
+        end
+    end
+
+    ImGui.End() -- End window
+end
+
+local function TableInspection()
+    -- Open the main window
+        ShowTableList()
+
+        -- Open windows for each selected table
+        for tableName, _ in pairs(openTableWindows) do
+            local tableData = tableToDisplay[tableName]
+            if tableData then
+                ImGui.Begin("Table Data - " .. tableName, openTableWindows[tableName], ImGuiWindowFlags_AlwaysAutoResize)
+                ShowTableData(tableName, tableData)
+                ImGui.End() -- End window
+            end
+        end
+end
+
+-- Initialize the GUI
+mq.imgui.init('thing', TableInspection)]]

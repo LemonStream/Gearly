@@ -17,6 +17,8 @@ Update Notes:
 Fixed string overflow crash if using a lot of observers. 
 Slot mismatching/error fixed
 
+2.0
+Known bug: Expanding the first row will only display a few items below it
 ]]
 
 mq = require('mq')
@@ -44,9 +46,10 @@ local doRefresh = false
 local useGroup = 1
 local useGroupName = "all"
 local beta = false
+local isAug = false
 blueBorder:SetTextureCell(1)
 dir = mq.luaDir
-fileName = '/Gearly/Character Data/'..myName..'_'..mq.TLO.EverQuest.Server()..'.ini'
+fileName = '/Gearly/Character Data/'..myName..'_'..mq.TLO.EverQuest.Server()..'.lua'
 path = dir..fileName
 imguiFlags = bit32.bor(ImGuiWindowFlags.None)
 tableFlags = bit32.bor(ImGuiTableFlags.ScrollX,ImGuiTableFlags.Hideable,ImGuiTableFlags.NoBordersInBody,ImGuiTableFlags.SizingFixedSame,ImGuiTableFlags.Resizable,ImGuiTableFlags.RowBg, ImGuiTableFlags.ScrollY, ImGuiTableFlags.BordersOuter,ImGuiTableFlags.Sortable, ImGuiTableFlags.Reorderable,ImGuiTableFlags.SortMulti)
@@ -80,7 +83,8 @@ local displaySlotTable = {[0]= {8,7,n="leftear"},[1]= {0,7,n="head"},[2]= {0,7,n
 
 --Write the full table to the file
 local function save_settings(set)
-    LIP.save(path, set)
+    --LIP.save(path, set)
+    mq.pickle(path,set)
 end
 
 --Create the settings data for sorting in the settings window
@@ -128,10 +132,10 @@ local function getComboItems()
     for group_idx = 1, mq.TLO.DanNet.GroupCount() do
         local group = mq.TLO.DanNet.Groups(group_idx)()
         Write.Debug('group %s idx %s _ %s match %s eval %s',group,group_idx,group:find('_'),group:match('%d', -1),(not group:find('_') or (group:find('_') and group:find('zone'))))
-        if writeToLog then mq.cmdf('group %s idx %s _ %s match %s eval %s',group,group_idx,group:find('_'),group:match('%d', -1),(not group:find('_') or (group:find('_') and group:find('zone')))) end
+        if writeToLog then mq.cmdf('/mqlog group %s idx %s _ %s match %s eval %s',group,group_idx,group:find('_'),group:match('%d', -1),(not group:find('_') or (group:find('_') and group:find('zone')))) end
         if (not group:find('_') or (group:find('_') and (group:find('zone') or group:find('group'))) and #group > 0) then --temp fix for adding blanks. Not sure what result from Groups is resulting in blanks
             Write.Debug('adding %s',group)
-            if writeToLog then mq.cmdf('adding %s',group) end
+            if writeToLog then mq.cmdf('/mqlog adding %s',group) end
             table.insert(groups, group)
         end
     end
@@ -164,13 +168,16 @@ local function loadAllCharactersTable(loadSettings)
         if writeToLog then mq.cmdf("/mqlog current Client: %s",currentClient) end
         if not currentClient then Write.Error(string.format("CRITICAL ERROR. Please unload and reload DanNet (/plugin mq2dannet unload  /plugin mq2dannet)")) mq.exit() end
         --allInventories[currentClient] = {}
-        local tempFileName = '/Gearly/Character Data/'..currentClient..'_'..mq.TLO.EverQuest.Server()..'.ini'
+        local tempFileName = '/Gearly/Character Data/'..currentClient..'_'..mq.TLO.EverQuest.Server()..'.lua'
         local tempPath = dir..tempFileName
         Write.Debug(string.format("path is %s open is %s",tempPath,io.open(tempPath)))
         if writeToLog then mq.cmdf("/mqlog path is %s open is %s",tempPath,io.open(tempPath)) end
         allInventories[currentClient] ={}
-        if io.open(tempPath) then
-            allInventories[currentClient] = LIP.load(tempPath)
+        print(tempPath)
+        local characterData, error = loadfile(tempPath)
+        if not error then
+            allInventories[currentClient] = characterData() --loadfile returns a function, so () is required
+            --pickleTable(allInventories[currentClient],"allInventories"..currentClient)
         else --If characters connected to dannet don't have their own ini yet
             Write.Error(string.format("No toon info for %s. Run /lua run gearly once on all characters or click the Update All Gear button",currentClient))
             allInventories[currentClient] = {}
@@ -189,6 +196,11 @@ local function DtotheA(wipe)
         if allInventories[toon]["other"] then 
             local toonClass = allInventories[toon]["other"]["class"]
             local toonName = allInventories[toon]["other"]["Character"]
+            local alreadyHaveAug = false
+            if currentFilters then local isAug = string.match(currentFilters,"isAug") else local isAug = false end
+            if isAug then
+                if searchNestedTables(allInventories[toon],itemWindowID) then alreadyHaveAug = true end
+            end
             for slot, valuesTable in pairs(allInventories[toon]) do --For each slot in the slot table which has a values table
                 if slot ~= "other" then
                     local dataToInsert = {}
@@ -197,22 +209,70 @@ local function DtotheA(wipe)
                         matchSlot = string.match(currentFilters,slot)
                         for statType, value in pairs(allInventories[toon][slot]) do
                             if matchSlot and not isAuto then
-                                if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
+                                Write.Debug("1value %s slot %s ",value,slot)
+                                if statType == "AugData" then
+                                    dataToInsert.AugData = value
+                                else
+                                    if not value or value == "nil" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
+                                end
                                 dataToInsert["Character"] = toonName --character name to display in the table
                                 dataToInsert["ItemSlot"] = slot --Item slot name
                                 dataToInsert["Class"] = toonClass --Item slot name
-                            elseif matchSlot and matchClass then --matches | array to our 11th entry in value (class shortname) for AutoFilter
-                                if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
-                                dataToInsert["Character"] = toonName --character name to display in the table
-                                dataToInsert["ItemSlot"] = slot --Item slot name
-                                dataToInsert["Class"] = toonClass --Item slot name
+                            elseif matchSlot and matchClass then --matches | array to our 11th entry in value (class shortname) for AutoFilter. This is the autofilter section
+                                --if isAug then
+                                    --Write.Info("slot %s",slot)
+                                    --[[for i=1, 6 do
+                                        --Write.Info("type %s value %s valueaugslot i%s %s name %s ID %s equal %s",type(value),value,i,value["AugSlot"..i],value["AugSlot"..i].Name,itemWindowID,value["AugSlot"..i].Name == itemWindowID)
+                                        
+                                        if type(value) == "table" and value["AugSlot"..i] then 
+                                            Write.Info("type: %s", type(value))
+                                            Write.Info("value: %s", value)
+                                            Write.Info("value augslot%s: %s", i, value["AugSlot"..i])
+                                           Write.Info("name: %s", value["AugSlot"..i].Name)
+                                            Write.Info("ID: %s", itemWindowID)
+                                            Write.Info("equal: %s", value["AugSlot"..i].Name == itemWindowID)
+                                        end
+                                        if type(value) == "table" and value["AugSlot"..i].Name and value["AugSlot"..i].Name == itemWindowID then
+                                            alreadyHaveAug = true
+                                            Write.Error("Have aug")
+                                            i = 6
+                                        end
+                                    end]]
+                                    --if not alreadyHaveAug then
+                                        Write.Debug("2value %s slot %s ",value,slot)
+                                        if statType == "AugData" then
+                                            dataToInsert.AugData = value
+                                        else
+                                            if not value or value == "nil" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
+                                        end
+                                        dataToInsert["Character"] = toonName --character name to display in the table
+                                        dataToInsert["ItemSlot"] = slot --Item slot name
+                                        dataToInsert["Class"] = toonClass --Item slot name
+                                    --end
+                                --else
+                                    Write.Debug("2value %s slot %s ",value,slot)
+                                    if statType == "AugData" then
+                                        dataToInsert.AugData = value
+                                    else
+                                        if not value or value == "nil" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
+                                    end
+                                    dataToInsert["Character"] = toonName --character name to display in the table
+                                    dataToInsert["ItemSlot"] = slot --Item slot name
+                                    dataToInsert["Class"] = toonClass --Item slot name
+                                --end
                             end
                         end
-                        if matchSlot and not isAuto then table.insert(displayTable,dataToInsert) end
-                        if matchSlot and matchClass then table.insert(displayTable,dataToInsert) end
+                        if matchSlot and not isAuto and not alreadyHaveAug then table.insert(displayTable,dataToInsert) end --For slot filtering
+                        if matchSlot and matchClass and (not isAug or isAug and not alreadyHaveAug) then table.insert(displayTable,dataToInsert) end --Auto filtering
                     else
                         for statType, value in pairs(allInventories[toon][slot]) do --For each stat and value in the current slot for the current toon
-                            if not value or value == "NULL" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
+                            Write.Debug("3value |%s| slot %s statType %s",value,slot,statType)
+                            --displayTable[1].AugData.AugSlot1.HP
+                            if statType == "AugData" then
+                                    dataToInsert.AugData = value
+                            else
+                                if not value or value == "nil" then dataToInsert[statType] = "" else dataToInsert[statType] = value end
+                            end
                         end
                         dataToInsert["Character"] = toonName --character name to display in the table
                         dataToInsert["ItemSlot"] = slot --Item slot name
@@ -229,25 +289,49 @@ end
 local function createInventoryData(doWrite,reloadIni)
     for i=0,22,1 do --Writes my gear stats to the invT[myName] table.
         Inv = mq.TLO.Me.Inventory(i)
-        --local slotName = mq.TLO.Me.Inventory(i).InvSlot.Name()
         local slotName = mq.TLO.InvSlot(i).Name()
         if Inv() then --If I have an item in the slot
-            Write.Debug(string.format("i%s Inv%s slot%s",i,Inv(),slotName))
+            Write.Debug(string.format("i %s Inv %s slot %s",i,Inv(),slotName))
             if writeToLog then mq.cmdf("/mqlog i%s Inv%s slot%s",i,Inv(),slotName) end
             invT[slotName] = {}
-            for j=1,#statsToDisplay do --For each stat we want to save and display
-                invT[slotName][statsToDisplay[j]] = Inv[statsToDisplay[j]] --Put the stat and its value into the table
+            invT[slotName].AugData = {}
+            for n=1,6 do
+                invT[slotName].AugData["AugSlot"..n] = {} --Create the aug slot table
             end
-        else
+            for j=1,#statsToDisplay do --For each stat we want to save and display
+                local itemStat = " "
+                if Inv[statsToDisplay[j]] then itemStat = Inv[statsToDisplay[j]]() or " " else itemStat = " " end
+                if tostring(itemStat) == "0" then itemStat = " " end
+                Write.Debug("%s %s %s",slotName,statsToDisplay[j],itemStat)
+                invT[slotName][statsToDisplay[j]] = itemStat --Put the stat and its value into the table(InventoryTable[SlotName][HP] = {150})
+                for n=1,6 do
+                    invT[slotName].AugData["AugSlot"..n][statsToDisplay[j]] = {}
+                    
+                    if not mq.TLO.Me.Inventory(i).AugSlot(n).Empty() and statsToDisplay[j] ~= "Character" then  
+                        Write.Debug("aug %s stat %s value %s in %s item %s",n,statsToDisplay[j],mq.TLO.Me.Inventory(i).AugSlot(n).Item[statsToDisplay[j]](),slotName,mq.TLO.Me.Inventory(i).AugSlot(n).Empty())
+                        local stat = mq.TLO.Me.Inventory(i).AugSlot(n).Item[statsToDisplay[j]]()
+                        if tostring(stat) == "0" then stat = " " end
+                        invT[slotName].AugData["AugSlot"..n][statsToDisplay[j]] = stat 
+                    else
+                        invT[slotName].AugData["AugSlot"..n][statsToDisplay[j]] = " " 
+                    end
+                    invT[slotName].AugData["AugSlot"..n].ItemSlot = mq.TLO.Me.Inventory(i).AugSlot(n).Type()
+                    --invT.SlotName.AugData.AugSlot1.HP 
+                end
+            end
+            
+        else --empty slot
             slotName = gearData.slots[i] --Have to define slotName since it's empty and comes in as nil
             invT[slotName] = {}
             for j=1,#statsToDisplay do --For each stat we want to save and display
-                if Inv[statsToDisplay[j]] then invT[slotName][statsToDisplay[j]] = " " end--Put the stat and its value into the table if it's a real item stat.
+                invT[slotName][statsToDisplay[j]] = " " --Put the stat and its value into the table(InventoryTable[SlotName][HP] = {150})
+                Write.Debug("%s %s %s",slotName,statsToDisplay[j],invT[slotName][statsToDisplay[j]])
             end
         end
         if i == 22 then invT.other = {class = mq.TLO.Me.Class(), Character = mq.TLO.Me.CleanName.Lower()} end
     end
     if doWrite then --if updating the character ini, write each slot to the ini for the character running the script
+        --pickleTable(invT,"invT")
         save_settings(invT)
         Write.Info("\agMy Gearly Data Updated")
     end
@@ -259,7 +343,7 @@ local function loadSettings()
     local s = io.open(path)
     Write.Info("Welcome to Gearly by Lemons")
     if s and not justWrite then --Character data file exists
-        Write.Info("Ini already exists")
+        Write.Debug("Ini already exists")
         checkIniSettings()
         createInventoryData(false,true) --Update the character ini file with inventory data, load 
     else
@@ -412,7 +496,6 @@ local function nameColumns()
     end
 end
 
---GUI:Draw table
 local function drawTable()
     if ImGui.BeginTable('charInvTable', #statsToDisplay, tableFlags) then    --Start the table  
         nameColumns() --Name the columns
@@ -431,26 +514,93 @@ local function drawTable()
                 sort_specs.SpecsDirty = false
             end
         end
-
+        local extraRows = 0
         ImGui.TableHeadersRow() --Make the header with the names from nameColumns
         local clipper = ImGuiListClipper.new() -- Use clipper so we only display what's on the screen
-            clipper:Begin(#displayTable)--The data table we're displaying
-            while clipper:Step() do -- while it's actually showing
-                for row_n = clipper.DisplayStart, clipper.DisplayEnd - 1, 1 do --for each row that is currently shown
-                    local item = displayTable[row_n +1] --table item to display. Not sure why +1. 0 vs 1 index?
-                    ImGui.PushID(item) --Not sure. Initialize it to access it?
-                    for i=1,#statsToDisplay do --For each stat they want to see, display it on the table
-                        if item[statsToDisplay[i]] == "Character" then else
-                            ImGui.TableNextColumn()
-                            ImGui.Text(string.format('%s', item[statsToDisplay[i]]))
+        clipper:Begin(#displayTable + extraRows)--The data table we're displaying. Add extra rows for the trees and set default size height since it fucks up on the first line where it looks for the size if open.
+        while clipper:Step() do -- while it's actually showing
+            for row_n = clipper.DisplayStart, clipper.DisplayEnd -1, 1 do --for each row that is currently shown
+                local item = displayTable[row_n +1] --table item to display. Not sure why +1. 0 vs 1 index?
+                ImGui.PushID(item) --Not sure. Initialize it to access it?
+                ImGui.TableNextColumn() --Placed before the treenode it will enable all data on the same line
+                local treeopen = ImGui.TreeNodeEx(tostring(item[statsToDisplay[1]]),bit32.bor(ImGuiTreeNodeFlags.SpanAllColumns)) --No flag that removes the arrow and doesn't replace it
+                for columnnum=2,#statsToDisplay do --For each column in the table, display a value. Start at 2 since we use the first for the treenode
+                    --if item[statsToDisplay[j]] ~= "Character" then
+                        ImGui.TableNextColumn()
+                        ImGui.Text(string.format('%s', item[statsToDisplay[columnnum]]))
+                    --end
+                    
+                end
+                if treeopen then
+                    local hasAug = function () 
+                        local r = false
+                        if item.AugData then 
+                            return true else
+                                return false
+                            end
+                        end
+                    if hasAug() then
+                        ImGui.TableNextColumn()
+                        local last = 1
+                        --Write.Info("start")
+                        for i=1, 6 do --for each aug slot
+                           --Write.Info("AugSlot %s",item.AugData["AugSlot"..i])
+                           --pickleTable(item,"item"..row_n)
+                           local augslot = item.AugData["AugSlot"..i].ItemSlot
+                           --Write.Info("Augslot %s last %s i%s",augslot,last,i)
+                            if augslot > 0 and augslot~= 21 and augslot > last then
+                                extraRows = extraRows + 1
+                                for columnnum=1, #statsToDisplay do
+                                    local augStatText = item.AugData["AugSlot"..i][statsToDisplay[columnnum]]
+                                    --Do I like the look of blank items being -? Seems busy
+                                    if not augStatText or augStatText == " " then ImGui.Text("") else ImGui.Text(string.format('%s', item.AugData["AugSlot"..i][statsToDisplay[columnnum]])) end
+                                    ImGui.TableNextColumn()
+                                end
+                                last = augslot
+                            end
+                            --clipper.DisplayEnd = clipper.DisplayEnd + extraRows
+                            
                         end
                     end
-                    ImGui.PopID()
+                    ImGui.TreePop()
+                    ImGui.TableNextRow()
                 end
+                ImGui.PopID()
             end
-        ImGui.EndTable()
+         
+        end
     end
+    ImGui.EndTable() 
 end
+
+--[[Went a different way
+local function displayTrees(rowdata)
+    for i=1, #statsToDisplay do --For each column
+        local treeopen --Scope it here and define it later
+        --If a new table of aug data is populated, then local open = imgui.treenodeex etc. Otherwise create a treenodeex with leaf
+            --rowdata['AugSlot1']
+        if i == 1 then --Maybe look at statsToDisplay to match the first entry so it's always the first displayed column instead
+            if rowdata['AugSlot1'] > 0 then --If it has an aug. Force store this data regardless of what's being displayed or I need to create a new table
+                treeopen = ImGui.TreeNodeEx(rowdata[statsToDisplay[i]/],ImGuiTreeNodeFlags.SpanAllColumns)
+            else 
+                ImGui.TreeNodeEx(rowdata[statsToDisplay[i]/],ImGuiTreeNodeFlags.SpanAllColumns,ImGuiTreeNodeFlags.Leaf)
+            end
+            ImGui.TreePop()
+            ImGui.TableNextColumn()
+        else
+            ImGui.TableNextColumn()
+            ImGui.Text(rowdata[statsToDisplay[i]/])
+        end
+        if treeopen then
+            --for every aug slot, check if it has it and display it
+            ImGui.TableNextColumn()
+            ImGui.Text(rowdata[statsToDisplay[i]/])
+        end
+        ImGui.TableNextRow()
+    end
+end]]
+
+
 
 --Handle auto filter based on data in item window
 local function autoFilter()
@@ -460,6 +610,7 @@ local function autoFilter()
         local itemWindow = mq.TLO.Window("ItemDisplayWindow").Text() --Name of the item in the item window
         if itemWindow:match("(Augmented)") then itemWindow = itemWindow:sub(1,-13) end
         local numClasses = mq.TLO.DisplayItem(itemWindow).Item.Classes()
+        local isAugFilter = mq.TLO.DisplayItem(itemWindow).Item.Type() == 'Augmentation'
         if itemWindowID ~= itemWindow then itemWindowID = itemWindow end --So we don't run the operation on the same window multiple times
         if itemWindowID ~= listDone and numClasses > 0 then
             currentFilters = nil
@@ -506,6 +657,12 @@ local function autoFilter()
             if slots then currentFilters = currentFilters.."|"..slots end
             Write.Debug("Filter to class "..currentFilters.." for item "..itemWindow)
             if writeToLog then mq.cmdf("/mqlog Filter to class "..currentFilters.." for item "..itemWindow) end
+            if isAugFilter then
+                isAug = true
+                if writeToLog then mq.cmdf("/mqlog Filter to Augmentation for item %s",itemWindow) end
+            else 
+                isAug = false 
+            end
             displayTable = nil
             DtotheA()
         end
