@@ -582,6 +582,46 @@ local function drawTable()
     end
     ImGui.EndTable() 
 end
+local function writeDisplayTableToCsv()
+    Write.Info("Writing current display to CSV. Saved in your lua folder as GearlyCSV")
+    --local file1 = io.open(dir.."/file1.csv", "w")
+    --file1:write(table.concat(statsToDisplay, ",") .. "\n")
+    -- Open the second file for writing
+    local file2 = io.open(dir.."/GearlyCSV.csv", "w")
+    -- Write the headers to the second file
+    file2:write(table.concat(statsToDisplay, ",") .. "\n")
+    -- Iterate over the displayTable
+    for _, itemData in ipairs(displayTable) do
+        -- Initialize an empty table to store the row data
+        local row1 = {}
+        local row2 = {}
+        -- Iterate over the statsToDisplay
+        for _, stat in ipairs(statsToDisplay) do
+            --If the item has AugData, write it to the first file. Broken because we have to do augs in its own loop. Not a priority
+            --[[if itemData.AugData then
+                for i=1, 6 do
+                    if #itemData.AugData["AugSlot"..i].Name > 2 then
+                        local augStat = itemData.AugData["AugSlot"..i][stat]
+                        printf("stat %s augStat %s",stat,augStat)
+                        if augStat and augStat ~= "" then
+                            table.insert(row1, augStat)
+                        end
+                    end
+                end
+            end]]
+            -- Write it to the second file
+            table.insert(row2, itemData[stat] or "")
+        end
+        -- Write the row data to the first file
+        --file1:write(table.concat(row1, ",") .. "\n")
+
+        -- Write the row data to the second file
+        file2:write(table.concat(row2, ",") .. "\n")
+    end
+    -- Close the files
+    --file1:close()
+    file2:close()
+end
 
 --[[Went a different way
 local function displayTrees(rowdata)
@@ -838,11 +878,12 @@ end
 --handles the /gear commands
 local function gearCommand(args)
     if not args then Write.Info("Specify /gear show /gear hide or /gear refresh") return end
-    Write.Debug(string.format("%s called in gearCommand",args))
+    Write.Debug(string.format("|%s| called in gearCommand",args))
     if writeToLog then mq.cmdf("/mqlog %s called in gearCommand",args) end
-    argl = args:lower()
+    argl = args:lower() --Thats ARGL
+    if argl == "csv" then writeDisplayTableToCsv() end
     if argl == "show" then openGUI = true end
-    if argl == "hide" then openGUI = false end
+    if argl == "hide" then openGUI = false end 
     if argl == "refresh" then
         Write.Debug("Calling refresh command")
         if writeToLog then mq.cmdf("/mqlog Calling refresh command") end
@@ -878,6 +919,7 @@ mq.imgui.init('thing', Gear)
 
 DtotheA(true) --initial loading of the data to display
 
+--Main loop
 while loop do
     if doRefresh then
         getComboItems()
