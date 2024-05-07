@@ -96,7 +96,7 @@ local function checkIniSettings()
     local tempFileName = '/Gearly/Gearly Settings.ini'
     local tempPath = dir..tempFileName
     Write.Debug(string.format("path is %s open is %s",tempPath,io.open(tempPath)))
-    if writeToLog then mq.cmdf("/mqlog path is %s open is %s",tempPath,io.open(tempPath)) end
+    if writeToLog then mq.cmdf("/mqlog path is %s open is %s checkIniSettings",tempPath,io.open(tempPath)) end
     if not io.open(tempPath) then --Doesnt exist. Default settings based on geatData.lua
         Write.Info("Please wait while we create your settings files")
         for k,v in pairs(gearData.itemTypesToDisplay) do
@@ -112,9 +112,12 @@ local function checkIniSettings()
         for k in pairs(gearData.itemTypesToDisplay) do
             table.insert(itemTypesTable,k)
         end
+        Write.Debug("Loading ini settings ")
+        if writeToLog then mq.cmdf("/mqlog Loading ini settings") end
         iniDisplaySettings = LIP.load(tempPath)
         if not iniDisplaySettings["Display Settings"] or not iniDisplaySettings["Column Order"]then
-            print("empty file")
+            Write.Debug("Empty ini file")
+            if writeToLog then mq.cmdf("/mqlog Empty ini file") end
             for k,v in pairs(gearData.itemTypesToDisplay) do
                 iniDisplaySettings["Display Settings"][k] = v
             end
@@ -173,13 +176,15 @@ local function loadAllCharactersTable(loadSettings)
         Write.Debug(string.format("path is %s open is %s",tempPath,io.open(tempPath)))
         if writeToLog then mq.cmdf("/mqlog path is %s open is %s",tempPath,io.open(tempPath)) end
         allInventories[currentClient] ={}
-        print(tempPath)
         local characterData, error = loadfile(tempPath)
         if not error then
             allInventories[currentClient] = characterData() --loadfile returns a function, so () is required
+            Write.Debug("Character data created for %s",currentClient)
+            if writeToLog then mq.cmdf("/mqlog Character data created for %s",currentClient) end
             --pickleTable(allInventories[currentClient],"allInventories"..currentClient)
         else --If characters connected to dannet don't have their own ini yet
             Write.Error(string.format("No toon info for %s. Run /lua run gearly once on all characters or click the Update All Gear button",currentClient))
+            if writeToLog then mq.cmdf("/mqlog No toon info for %s. Run /lua run gearly once on all characters or click the Update All Gear button",currentClient) end
             allInventories[currentClient] = {}
         end
     end
@@ -197,8 +202,10 @@ local function DtotheA(wipe)
             local toonClass = allInventories[toon]["other"]["class"]
             local toonName = allInventories[toon]["other"]["Character"]
             local alreadyHaveAug = false
+            writeDebug("toonClass %s toonName %s currentFilters %s",toonClass,toonName,currentFilters)
             if currentFilters then local isAug = string.match(currentFilters,"isAug") else local isAug = false end
             if isAug then
+                writeDebug("isAug %s",isAug)
                 if searchNestedTables(allInventories[toon],itemWindowID) then alreadyHaveAug = true end
             end
             for slot, valuesTable in pairs(allInventories[toon]) do --For each slot in the slot table which has a values table
@@ -207,9 +214,10 @@ local function DtotheA(wipe)
                     if currentFilters then
                         matchClass = string.match(currentFilters,toonClass) --used in AutoFilter
                         matchSlot = string.match(currentFilters,slot)
+                        writeDebug("matchClass %s matchSlot %s",matchClass,matchSlot)
                         for statType, value in pairs(allInventories[toon][slot]) do
                             if matchSlot and not isAuto then
-                                Write.Debug("1value %s slot %s ",value,slot)
+                                writeDebug("1value %s slot %s ",value,slot)
                                 if statType == "AugData" then
                                     dataToInsert.AugData = value
                                 else
@@ -239,7 +247,7 @@ local function DtotheA(wipe)
                                         end
                                     end]]
                                     --if not alreadyHaveAug then
-                                        Write.Debug("2value %s slot %s ",value,slot)
+                                        writeDebug("2value %s slot %s ",value,slot)
                                         if statType == "AugData" then
                                             dataToInsert.AugData = value
                                         else
@@ -250,7 +258,7 @@ local function DtotheA(wipe)
                                         dataToInsert["Class"] = toonClass --Item slot name
                                     --end
                                 --else
-                                    Write.Debug("2value %s slot %s ",value,slot)
+                                    writeDebug("3value %s slot %s ",value,slot)
                                     if statType == "AugData" then
                                         dataToInsert.AugData = value
                                     else
@@ -266,7 +274,7 @@ local function DtotheA(wipe)
                         if matchSlot and matchClass and (not isAug or isAug and not alreadyHaveAug) then table.insert(displayTable,dataToInsert) end --Auto filtering
                     else
                         for statType, value in pairs(allInventories[toon][slot]) do --For each stat and value in the current slot for the current toon
-                            Write.Debug("3value |%s| slot %s statType %s",value,slot,statType)
+                            writeDebug("4value %s slot %s ",value,slot)
                             --displayTable[1].AugData.AugSlot1.HP
                             if statType == "AugData" then
                                     dataToInsert.AugData = value
@@ -344,10 +352,12 @@ local function loadSettings()
     Write.Info("Welcome to Gearly by Lemons")
     if s and not justWrite then --Character data file exists
         Write.Debug("Ini already exists")
+        if writeToLog then mq.cmdf("/mqlog Ini already exists") end
         checkIniSettings()
         createInventoryData(false,true) --Update the character ini file with inventory data, load 
     else
         Write.Info("Writing new data to your character file")
+        if writeToLog then mq.cmdf("/mqlog Writing new data to your character file") end
         checkIniSettings()
         createInventoryData(true,true)
     end

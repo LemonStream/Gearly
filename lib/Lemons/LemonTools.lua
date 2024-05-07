@@ -353,6 +353,20 @@ function searchNestedTables(t, searchString)
     return false
 end
 
+function getScriptName()
+    local callerInfo = debug.getinfo(1,'S').short_src
+    local name = callerInfo:match("\\([^\\]-)\\[^\\]-$")
+    return name..".lua"
+end
+
+function writeDebug(format, ...)
+    local message = string.format(format, ...)
+    Write.Debug(message)
+    if writeToLog then mq.cmdf("/mqlog %s", message) end
+end
+
+
+
 --[[Live table inspection tool
 gearly = require('../init')
 local checkboxStates = {}

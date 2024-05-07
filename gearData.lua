@@ -2,16 +2,15 @@ local gearData = {}
 
 gearData.selectedStats = {
     [1] = "Character",
-    [2] = "Name",
-    [3] = "AC",
-    [4] = "HP",
-    [5] = "Mana",
-    [6] = "ItemSlot",
+    [2] = "ItemSlot",
+    [3] = "Name",
+    [4] = "AC",
+    [5] = "HP",
+    [6] = "Mana",
     [7] = "ID",
     [8] = "Class",
     [9] = "ItemDelay",
     [10] = "Damage"
-    
 }
 
 gearData.slots = {
