@@ -39,31 +39,6 @@ luac.out
 *.x86_64
 *.hex
 
-Mrmezzy_firiona.ini
-Toadbok_firiona.ini
-Character Data/diasi_firiona.ini
-Character Data/havva_firiona.ini
-Character Data/hermyonee_firiona.ini
-Character Data/jorezrilu_firiona.ini
-Character Data/knorgar_firiona.ini
-Character Data/leinami_firiona.ini
-Character Data/miaxe_firiona.ini
-Character Data/Mrmezzy_firiona.ini
-Character Data/sashalicious_firiona.ini
-Character Data/Mrmezzy_firiona.ini
-Character Data/sneakycat_firiona.ini
-Character Data/tayytay_firiona.ini
-Character Data/tellerette_firiona.ini
-Character Data/Toadbok_firiona.ini
-Character Data/toadlee_firiona.ini
-Character Data/tolbashi_firiona.ini
-CREATE RELEASES HERE/Gearly/lib/Lemons/LemonTools.lua
-CREATE RELEASES HERE/Gearly/lib/dannet/helpers.lua
-CREATE RELEASES HERE/Gearly/lib/dannet/dannet.test.lua
-CREATE RELEASES HERE/Gearly/lib/Write.lua
-CREATE RELEASES HERE/Gearly/lib/LIP.lua
-CREATE RELEASES HERE/Gearly/init.lua
-CREATE RELEASES HERE/Gearly/gearData.lua
 selectedStats.lua
 itemTypesTable.lua
 itemTypes.lua
@@ -71,41 +46,7 @@ Gearly Settings.ini
 Gearly Settings - Copy.ini
 gearData2.lua
 Gearly Settings.ini
-Character Data/raydor_erollisi.ini
-Character Data/cuddlybear_firiona.ini
-Toadlee_firiona.ini
-CREATE RELEASES HERE/v 1,22/Gearly/lib/dannet/dannet.test.lua
-CREATE RELEASES HERE/v 1,22/Gearly/lib/Lemons/LemonTools.lua
-CREATE RELEASES HERE/v 1,22/Gearly/gearData.lua
-CREATE RELEASES HERE/v 1,22/Gearly/init.lua
-CREATE RELEASES HERE/v 1,22/Gearly/lib/LIP.lua
-CREATE RELEASES HERE/v 1,22/Gearly/lib/Write.lua
-CREATE RELEASES HERE/v 1,22/Gearly/lib/dannet/helpers.lua
-CREATE RELEASES HERE/v 1.21/gearData.lua
-CREATE RELEASES HERE/v 1.21/init.lua
-CREATE RELEASES HERE/v 1.21/lib/LIP.lua
-CREATE RELEASES HERE/v 1.21/lib/Write.lua
-CREATE RELEASES HERE/v 1.21/lib/dannet/dannet.test.lua
-CREATE RELEASES HERE/v 1.21/lib/dannet/helpers.lua
-CREATE RELEASES HERE/v 1.21/lib/Lemons/LemonTools.lua
 .vscode/settings.json
-Character Data/leinami_erollisi.ini
-Character Data/Mrmezzy_firiona.ini
-Character Data/Toadbok_firiona.ini
-Character Data/Mrmezzy_firiona.ini
-Character Data/Mrmezzy_firiona.ini
 Gearly Settings.ini
-Character Data/havva_firiona.lua
-Character Data/hermyonee_firiona.lua
-Character Data/knorgar_firiona.lua
-Character Data/leinami_firiona.lua
-Character Data/raydora_erollisi.lua
-Character Data/sashalicious_firiona.lua
-Character Data/mrmezzy_firiona.lua
-Character Data/miaxe_firiona.lua
-Character Data/raydor_erollisi.lua
-Character Data/sneakycat_firiona.lua
-Character Data/tayytay_firiona.lua
-Character Data/tellerette_firiona.lua
-Character Data/toadbok_firiona.lua
-Character Data/toadlee_firiona.lua
+test.lua
+.gitignore

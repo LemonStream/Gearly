@@ -274,7 +274,7 @@ local function DtotheA(wipe)
                         if matchSlot and matchClass and (not isAug or isAug and not alreadyHaveAug) then table.insert(displayTable,dataToInsert) end --Auto filtering
                     else
                         for statType, value in pairs(allInventories[toon][slot]) do --For each stat and value in the current slot for the current toon
-                            writeDebug("4value %s slot %s ",value,slot)
+                            writeDebug("4value |%s| slot %s statType %s",value,slot,statType)
                             --displayTable[1].AugData.AugSlot1.HP
                             if statType == "AugData" then
                                     dataToInsert.AugData = value
@@ -286,11 +286,14 @@ local function DtotheA(wipe)
                         dataToInsert["ItemSlot"] = slot --Item slot name
                         dataToInsert["Class"] = toonClass --Item slot name
                         table.insert(displayTable,dataToInsert) --Insert into the next available row the data we want to display
+                        writeDebug("end 4")
                     end
                 end
             end
         end
+        writeDebug("Leaving toon %s",toon)
     end
+    writeDebug("leave DTA")
 end
 
 --Fill table with my gear stats and write to ini if called for
@@ -371,8 +374,8 @@ local function refreshAll()
     mq.cmdf("/dgex /lua run gearly once")
     createInventoryData(true,false)
     if mq.TLO.DanNet.PeerCount() > 1 then
-        mq.delay(500, function () return mq.TLO.DanNet(pn).O('"Lua.Script[gearly].Status"')() == "running" end ) 
-        mq.delay(500, function () return mq.TLO.DanNet(pn).O('"Lua.Script[gearly].Status"')() == "exited"end )
+        mq.delay(1500, function () return mq.TLO.DanNet(pn).O('"Lua.Script[gearly].Status"')() == "running" end ) 
+        mq.delay(1500, function () return mq.TLO.DanNet(pn).O('"Lua.Script[gearly].Status"')() == "exited"end )
         dannet.unobserve(pn,"Lua.Script[gearly].Status",1000)
     end
     loadAllCharactersTable(false) --Load character data from ini files but don't reload gearly ini settings
@@ -579,9 +582,11 @@ local function drawTable()
             end
          
         end
+        ImGui.EndTable()
     end
-    ImGui.EndTable() 
+     --endtable was here and it would crash others
 end
+
 local function writeDisplayTableToCsv()
     Write.Info("Writing current display to CSV. Saved in your lua folder as GearlyCSV")
     --local file1 = io.open(dir.."/file1.csv", "w")
@@ -918,7 +923,7 @@ if justWrite then Write.Info("Finished updating character data in "..path) mq.ex
 mq.imgui.init('thing', Gear)
 
 DtotheA(true) --initial loading of the data to display
-
+writeDebug("Finished loading initial data. doRefresh %s",doRefresh)
 --Main loop
 while loop do
     if doRefresh then
